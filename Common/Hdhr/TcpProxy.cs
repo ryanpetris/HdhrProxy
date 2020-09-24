@@ -1,10 +1,11 @@
 using System;
-using System.Buffers;
 using System.IO;
+using System.Linq;
 using System.Net;
 using System.Net.Sockets;
 using System.Threading;
 using System.Threading.Tasks;
+using HdhrProxy.Common.Extensions;
 
 namespace HdhrProxy.Common.Hdhr
 {
@@ -25,6 +26,7 @@ namespace HdhrProxy.Common.Hdhr
             
             Listener = new TcpListener(new IPEndPoint(IPAddress.Parse(proxyHost), port));
         }
+
         public async Task Stop()
         {
             await Task.Yield();
@@ -33,6 +35,17 @@ namespace HdhrProxy.Common.Hdhr
         }
 
         public async Task Run()
+        {
+            await Task.Yield();
+
+            Console.WriteLine($"Proxy listening on {Host}:{Port}.");
+
+            await RunInternal().IgnoreStreamExceptions();
+
+            Console.WriteLine($"Proxy stopped on {Host}:{Port}.");
+        }
+
+        private async Task RunInternal()
         {
             Listener.Start();
             
@@ -46,86 +59,46 @@ namespace HdhrProxy.Common.Hdhr
                         return;
                     }
 
-                    try
-                    {
-                        RunConnection(await Listener.AcceptTcpClientAsync());
-                    }
-                    catch (ObjectDisposedException)
-                    {
-                        return;
-                    }
+                    RunConnection(await Listener.AcceptTcpClientAsync());
                 }
             }
         }
 
-        public async void RunConnection(TcpClient connection)
-        {
-            await using (CancellationToken.Register(connection.Close))
-            {
-                using (var client = new TcpClient(Host, Port))
-                {
-                    await using (CancellationToken.Register(client.Close))
-                    {
-                        while (connection.Connected && client.Connected)
-                        {
-                            var upstream = connection.GetStream();
-                            var downstream = client.GetStream();
-
-                            await Task.WhenAll(new[]
-                            {
-                                RunConnectionReceive(upstream, downstream),
-                                RunConnectionTransmit(upstream, downstream)
-                            });
-                        }
-                    }
-                }
-            }
-        }
-
-        private async Task RunConnectionReceive(Stream upstream, Stream downstream)
+        private async void RunConnection(TcpClient connection)
         {
             await Task.Yield();
 
-            var bufferSize = 8192;
-            var buffer = ArrayPool<byte>.Shared.Rent(bufferSize);
+            await using var reg1 = CancellationToken.Register(connection.Close);
+            using var client = new TcpClient(Host, Port);
+            await using var reg2 = CancellationToken.Register(client.Close);
 
-            try
-            {
-                while (true)
-                {
-                    var received = await upstream.ReadAsync(buffer, 0, bufferSize, CancellationToken);
+            var connectionEndpoint = connection.Client.RemoteEndPoint;
+            var clientEndpoint = client.Client.RemoteEndPoint;
 
-                    if (received > 0)
-                        await downstream.WriteAsync(buffer, 0, received, CancellationToken);
-                }
-            }
-            finally
+            Console.WriteLine($"Proxy from {connectionEndpoint} to {clientEndpoint} established.");
+
+            var upstream = connection.GetStream();
+            var downstream = client.GetStream();
+
+            await Task.WhenAll(new[]
             {
-                ArrayPool<byte>.Shared.Return(buffer);
-            }
+                upstream.CopyToAsync(downstream, CancellationToken).IgnoreStreamExceptions(),
+                downstream.CopyToAsync(upstream, CancellationToken).IgnoreStreamExceptions(),
+                MonitorConnection(connection, client)
+            });
+
+            Console.WriteLine($"Proxy from {connectionEndpoint} to {clientEndpoint} closed.");
         }
-        
-        private async Task RunConnectionTransmit(Stream upstream, Stream downstream)
+
+        private async Task MonitorConnection(params TcpClient[] clients)
         {
             await Task.Yield();
 
-            var bufferSize = 8192;
-            var buffer = ArrayPool<byte>.Shared.Rent(bufferSize);
+            while (clients.All(c => c.IsRemoteConnected()) && !CancellationToken.IsCancellationRequested)
+                await Task.Delay(TimeSpan.FromSeconds(1), CancellationToken);
 
-            try
-            {
-                while (true)
-                {
-                    var received = await downstream.ReadAsync(buffer, 0, bufferSize, CancellationToken);
-
-                    if (received > 0)
-                        await upstream.WriteAsync(buffer, 0, received, CancellationToken);
-                }
-            }
-            finally
-            {
-                ArrayPool<byte>.Shared.Return(buffer);
-            }
+            foreach (var client in clients)
+                await Task.Run(() => client.Close()).IgnoreStreamExceptions();
         }
 
         public void Dispose()

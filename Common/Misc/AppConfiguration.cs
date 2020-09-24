@@ -6,6 +6,7 @@ namespace HdhrProxy.Common.Misc
     {
         public List<AppProxy> Proxies { get; set; }
         public string DataDir { get; set; }
+        public List<string> ListenAddresses { get; set; }
     }
 
     public class AppProxy
@@ -14,6 +15,7 @@ namespace HdhrProxy.Common.Misc
         public string ProxyHost { get; set; }
         public int HttpPort { get; set; }
         public int ControlPort { get; set; }
+        public string FauxDeviceId { get; set; }
 
         public string GetChannelFilename()
         {

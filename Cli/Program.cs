@@ -35,6 +35,7 @@ namespace HdhrProxy.Cli
             var runTasks = new List<Task>();
 
             Console.CancelKeyPress += (sender, eventArgs) => cts.Cancel();
+            AppDomain.CurrentDomain.ProcessExit += (sender, eventArgs) => cts.Cancel();
 
             runTasks.Add(Api.Program.Start(config, cts.Token));
             runTasks.AddRange(await GetTcpProxyTasks(config, cts.Token));

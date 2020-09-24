@@ -1,3 +1,4 @@
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using HdhrProxy.Common.Misc;
@@ -19,6 +20,6 @@ namespace HdhrProxy.Api
         private static IHostBuilder CreateHostBuilder(AppConfiguration configuration) =>
             Host.CreateDefaultBuilder()
                 .ConfigureServices(services => services.AddSingleton(configuration))
-                .ConfigureWebHostDefaults(webBuilder => webBuilder.UseStartup<Startup>().UseUrls("http://0.0.0.0:8080"));
+                .ConfigureWebHostDefaults(webBuilder => webBuilder.UseStartup<Startup>().UseUrls(configuration.ListenAddresses.Select(a => $"http://{a}").ToArray()));
     }
 }

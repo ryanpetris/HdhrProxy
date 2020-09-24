@@ -36,7 +36,10 @@ namespace HdhrProxy.Api.Services
 
             discoverInfo.DeviceAuth = "";
             discoverInfo.BaseUrl = discoverInfo.BaseUrl.Replace(proxy.Host, proxy.ProxyHost);
-            discoverInfo.LineupUrl = $"http://{proxy.Host}:{proxy.HttpPort}/lineup.json";
+            discoverInfo.LineupUrl = $"http://{proxy.ProxyHost}:{proxy.HttpPort}/lineup.json";
+
+            if (proxy.FauxDeviceId != null)
+                discoverInfo.DeviceId = proxy.FauxDeviceId;
 
             return discoverInfo;
         }

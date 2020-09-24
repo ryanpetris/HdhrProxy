@@ -40,8 +40,15 @@ namespace HdhrProxy.Api.Services
             
             if (!File.Exists(filePath))
                 return Enumerable.Empty<LineupItem>();
-            
-            var discoverInfo = await new HttpClient(proxy.Host, proxy.HttpPort).Discover();
+
+            var deviceId = proxy.FauxDeviceId;
+
+            if (deviceId == null)
+            {
+                var discoverInfo = await new HttpClient(proxy.Host, proxy.HttpPort).Discover();
+
+                deviceId = discoverInfo.DeviceId;
+            }
 
             await using var stream = File.OpenRead(filePath);
             using var streamReader = new StreamReader(stream);
@@ -50,7 +57,7 @@ namespace HdhrProxy.Api.Services
 
             var data = JsonConvert.DeserializeObject<IEnumerable<Channel>>(json);
 
-            return await ConversionUtilities.ChannelsToHdhrLineup(discoverInfo.DeviceId, data);
+            return await ConversionUtilities.ChannelsToHdhrLineup(deviceId, data);
         }
     }
 }
